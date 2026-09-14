@@ -1,0 +1,377 @@
+// مخطط قاعدة بيانات نظام "طيارتي" لإدارة الشؤون الإدارية للموظفين
+// راجع المحادثة للقرارات التصميمية المعتمدة (المدير = مدير القسم، صيغة التقييم، سياسة الإجازات)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum ContractType {
+  FULL_TIME
+  PART_TIME
+  TEMPORARY
+}
+
+enum ContractStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  PASSPORT
+  VISA
+  RESIDENCY
+  PROFESSIONAL_LICENSE
+  CERTIFICATE
+  CV
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  ON_LEAVE
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AlertType {
+  CONTRACT_END
+  VISA_EXPIRY
+  PASSPORT_EXPIRY
+  RESIDENCY_EXPIRY
+  LICENSE_EXPIRY
+}
+
+enum RewardDeductionType {
+  REWARD
+  DEDUCTION
+}
+
+enum IssuancePeriodType {
+  WEEKLY
+  MONTHLY
+}
+
+// ملف تعريف (profile) يمتد فوق مستخدم Supabase Auth (auth.users)
+// المعرّف id هو نفسه auth.users.id، يُنشأ عبر Supabase Admin API عند إضافة موظف
+model User {
+  id           String   @id
+  email        String   @unique
+  role         Role
+  isActive     Boolean  @default(true)
+  // صلاحية استثنائية: تسمح بتحديث "عدد الإصدارات" لأي موظف بغضّ النظر عن القسم، دون منح دور مدير كامل
+  canManageIssuances Boolean @default(false)
+  employeeId   String?  @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  approvedLeaveRequests LeaveRequest[]      @relation("ApprovedBy")
+  recordedAttendances   Attendance[]        @relation("RecordedBy")
+  reviewedPerformances  PerformanceReview[] @relation("ReviewedBy")
+  recordedRewards       RewardDeduction[]   @relation("RewardRecordedBy")
+  recordedPromotions    Promotion[]         @relation("PromotionRecordedBy")
+  recordedIssuances     IssuanceRecord[]    @relation("IssuanceRecordedBy")
+
+  @@map("users")
+}
+
+model Department {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  managerId String?    @unique
+  manager   Employee?  @relation("DepartmentManager", fields: [managerId], references: [id])
+  employees Employee[] @relation("DepartmentEmployees")
+  kpis      Kpi[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("departments")
+}
+
+model Employee {
+  id                     String           @id @default(uuid())
+  fullName               String
+  nationalId             String           @unique
+  birthDate              DateTime
+  nationality            String
+  phone                  String
+  address                String?
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+  departmentId           String?
+  department             Department?      @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  jobTitle               String
+  hireDate               DateTime
+  employmentStatus       EmploymentStatus @default(ACTIVE)
+  terminationDate        DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  managedDepartment      Department?      @relation("DepartmentManager")
+  user                   User?
+  contracts              Contract[]
+  documents              EmployeeDocument[]
+  attendances            Attendance[]
+  leaveBalances          LeaveBalance[]
+  leaveRequests          LeaveRequest[]
+  kpis                   Kpi[]
+  performanceReviews     PerformanceReview[]
+  trainings              Training[]
+  payrollSlips           PayrollSlip[]
+  rewardDeductions       RewardDeduction[]
+  promotions             Promotion[]
+  issuanceRecords        IssuanceRecord[]
+
+  @@map("employees")
+}
+
+model Contract {
+  id          String         @id @default(uuid())
+  employeeId  String
+  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractType ContractType
+  startDate   DateTime
+  endDate     DateTime?
+  baseSalary  Decimal        @db.Decimal(12, 2)
+  allowances  Json?          // [{ name: string, amount: number }]
+  status      ContractStatus @default(ACTIVE)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([employeeId])
+  @@map("contracts")
+}
+
+model EmployeeDocument {
+  id         String       @id @default(uuid())
+  employeeId String
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  docType    DocumentType
+  fileUrl    String
+  fileName   String
+  expiryDate DateTime?
+  uploadedAt DateTime     @default(now())
+
+  @@index([employeeId])
+  @@index([expiryDate])
+  @@map("employee_documents")
+}
+
+model Attendance {
+  id         String            @id @default(uuid())
+  employeeId String
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime          @db.Date
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     AttendanceStatus  @default(PRESENT)
+  notes      String?
+  recordedById String?
+  recordedBy   User?           @relation("RecordedBy", fields: [recordedById], references: [id])
+  createdAt  DateTime          @default(now())
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@map("attendance")
+}
+
+model LeaveType {
+  id                String         @id @default(uuid())
+  name              String         @unique // "سنوية" | "مرضية"
+  defaultAnnualDays Int
+  balances          LeaveBalance[]
+  requests          LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id          String    @id @default(uuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year        Int
+  totalDays   Int
+  usedDays    Int       @default(0)
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id          String              @id @default(uuid())
+  employeeId  String
+  employee    Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String
+  leaveType   LeaveType           @relation(fields: [leaveTypeId], references: [id])
+  startDate   DateTime            @db.Date
+  endDate     DateTime            @db.Date
+  daysCount   Int
+  reason      String?
+  status      LeaveRequestStatus  @default(PENDING)
+  approvedById String?
+  approvedBy   User?              @relation("ApprovedBy", fields: [approvedById], references: [id])
+  decidedAt    DateTime?
+  managerNotes String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model Kpi {
+  id             String      @id @default(uuid())
+  employeeId     String?
+  employee       Employee?   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  quarter        Int         // 1-4
+  year           Int
+  title          String
+  weightPercent  Decimal     @db.Decimal(5, 2)
+  targetValue    Decimal     @db.Decimal(12, 2)
+  actualValue    Decimal?    @db.Decimal(12, 2)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([employeeId, year, quarter])
+  @@index([departmentId, year, quarter])
+  @@map("kpis")
+}
+
+model PerformanceReview {
+  id              String   @id @default(uuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  quarter         Int
+  year            Int
+  overallScore    Decimal  @db.Decimal(4, 2) // من 5
+  managerNotes    String?
+  developmentPlan String?
+  reviewedById    String?
+  reviewedBy      User?    @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime @default(now())
+
+  @@unique([employeeId, quarter, year])
+  @@map("performance_reviews")
+}
+
+model Training {
+  id               String    @id @default(uuid())
+  employeeId       String
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  courseName       String
+  provider         String?
+  startDate        DateTime  @db.Date
+  endDate          DateTime? @db.Date
+  certificateUrl   String?
+  createdAt        DateTime  @default(now())
+
+  @@index([employeeId])
+  @@map("trainings")
+}
+
+model PayrollSlip {
+  id              String   @id @default(uuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month           Int      // 1-12
+  year            Int
+  baseSalary      Decimal  @db.Decimal(12, 2)
+  allowancesTotal Decimal  @db.Decimal(12, 2) @default(0)
+  deductionsTotal Decimal  @db.Decimal(12, 2) @default(0)
+  advancesTotal   Decimal  @db.Decimal(12, 2) @default(0)
+  netSalary       Decimal  @db.Decimal(12, 2)
+  pdfUrl          String?
+  generatedAt     DateTime @default(now())
+
+  @@unique([employeeId, month, year])
+  @@map("payroll_slips")
+}
+
+// حركات مالية استثنائية (مكافأة أو خصم) منفصلة عن كشف الراتب الشهري
+model RewardDeduction {
+  id           String              @id @default(uuid())
+  employeeId   String
+  employee     Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type         RewardDeductionType
+  amount       Decimal             @db.Decimal(12, 2)
+  reason       String
+  date         DateTime            @db.Date
+  recordedById String?
+  recordedBy   User?               @relation("RewardRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime            @default(now())
+
+  @@index([employeeId, date])
+  @@map("reward_deductions")
+}
+
+// السجل الوظيفي: كل تغيير في المسمى الوظيفي للموظف
+model Promotion {
+  id             String   @id @default(uuid())
+  employeeId     String
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  previousTitle  String
+  newTitle       String
+  effectiveDate  DateTime @db.Date
+  note           String?
+  recordedById   String?
+  recordedBy     User?    @relation("PromotionRecordedBy", fields: [recordedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([employeeId, effectiveDate])
+  @@map("promotions")
+}
+
+// عدد الإصدارات (تذاكر/حجوزات) لكل موظف، أسبوعيًا أو شهريًا
+model IssuanceRecord {
+  id           String             @id @default(uuid())
+  employeeId   String
+  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  periodType   IssuancePeriodType
+  periodStart  DateTime           @db.Date // بداية الأسبوع أو بداية الشهر
+  count        Int
+  recordedById String?
+  recordedBy   User?              @relation("IssuanceRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([employeeId, periodType, periodStart])
+  @@map("issuance_records")
+}
+
+model AlertSetting {
+  id            String    @id @default(uuid())
+  alertType     AlertType @unique
+  thresholdDays Int       @default(30)
+
+  @@map("alert_settings")
+}
