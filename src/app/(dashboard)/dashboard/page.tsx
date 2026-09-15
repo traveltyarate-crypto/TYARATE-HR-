@@ -77,12 +77,10 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900">مرحبًا، {user.employee?.fullName}</h1>
 
-      {(issuance.weekly !== null || issuance.monthly !== null) && (
-        <div className="grid grid-cols-2 gap-4">
-          <StatCard label="عدد الإصدارات هذا الأسبوع" value={issuance.weekly ?? "—"} />
-          <StatCard label="عدد الإصدارات هذا الشهر" value={issuance.monthly ?? "—"} />
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard label="عدد الإصدارات هذا الأسبوع" value={issuance.weekly ?? 0} />
+        <StatCard label="عدد الإصدارات هذا الشهر" value={issuance.monthly ?? 0} />
+      </div>
 
       {employeeId && <AttendanceWidget employeeId={employeeId} initialAttendance={today} />}
 

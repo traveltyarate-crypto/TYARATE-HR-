@@ -50,6 +50,7 @@ function navForRole(role: Role, canManageIssuances: boolean): NavItem[] {
     { href: "/leave", label: "إجازاتي", icon: CalendarDays },
     { href: "/rewards", label: "مكافآتي وخصوماتي", icon: Gift },
     { href: "/promotions", label: "ترقياتي", icon: TrendingUp },
+    { href: "/my-issuance", label: "عدد إصداراتي", icon: Ticket },
     ...issuanceItem,
   ];
 }
