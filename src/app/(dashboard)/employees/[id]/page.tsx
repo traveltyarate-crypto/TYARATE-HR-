@@ -13,6 +13,7 @@ import { RewardForm } from "./reward-form";
 import { PromotionForm } from "./promotion-form";
 import { IssuanceForm } from "./issuance-form";
 import { IssuancePermissionToggle } from "./issuance-permission-toggle";
+import { SetPasswordForm } from "./set-password-form";
 
 const REWARD_TYPE_LABELS: Record<string, string> = { REWARD: "مكافأة", DEDUCTION: "خصم" };
 const ISSUANCE_PERIOD_LABELS: Record<string, string> = { WEEKLY: "أسبوعي", MONTHLY: "شهري" };
@@ -215,6 +216,7 @@ export default async function EmployeeDetailPage({
           <DocumentForm employeeId={employee.id} />
           <RewardForm employeeId={employee.id} />
           <PromotionForm employeeId={employee.id} currentTitle={employee.jobTitle} />
+          {employee.user && <SetPasswordForm userId={employee.user.id} />}
         </div>
       )}
       {canRecordIssuance && (

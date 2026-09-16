@@ -216,6 +216,31 @@ export async function updateEmployee(
   return { success: "تم تحديث بيانات الموظف بنجاح" };
 }
 
+// تعيين كلمة مرور جديدة لحساب موظف يدويًا، دون الحاجة لبريد إعادة التعيين
+export async function setEmployeePassword(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole("ADMIN");
+
+  const userId = String(formData.get("userId") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!userId) return { error: "معرّف الحساب مفقود" };
+  if (password.length < 8) return { error: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل" };
+  if (password !== confirmPassword) return { error: "كلمتا المرور غير متطابقتين" };
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
+
+  if (error) {
+    return { error: `تعذّر تحديث كلمة المرور: ${error.message}` };
+  }
+
+  return { success: "تم تحديث كلمة مرور الموظف بنجاح" };
+}
+
 export async function updateEmployeeStatus(
   employeeId: string,
   status: "ACTIVE" | "ON_LEAVE" | "TERMINATED",
